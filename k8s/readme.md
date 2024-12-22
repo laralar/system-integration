@@ -1,16 +1,20 @@
-#https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/
-##https://www.server-world.info/en/note?os=Ubuntu_24.04&p=kubernetes&f=2
-#https://hbayraktar.medium.com/how-to-install-kubernetes-cluster-on-ubuntu-22-04-step-by-step-guide-7dbf7e8f5f99
+#### References:
+https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/
 
+https://www.server-world.info/en/note?os=Ubuntu_24.04&p=kubernetes&f=2
+
+https://hbayraktar.medium.com/how-to-install-kubernetes-cluster-on-ubuntu-22-04-step-by-step-guide-7dbf7e8f5f99
+
+```
 apt-get install -y apt-transport-https ca-certificates curl gpg
 rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
 apt-get update
-apt-get install -y kubelet kubeadm kubectl
+apt-get install -y kubelet kubeadm kubectl containerd
 apt-mark hold kubelet kubeadm kubectl
 systemctl enable --now kubelet
-apt -y install containerd
+
 mkdir /etc/containerd
 containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
 sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
@@ -35,3 +39,4 @@ ln -s /etc/apparmor.d/crun /etc/apparmor.d/disable/
 apt update -y
 apt upgrade -y
 apt autoremove -y
+```
