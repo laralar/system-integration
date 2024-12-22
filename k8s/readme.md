@@ -51,10 +51,12 @@ kubeadm init --control-plane-endpoint=LOAD_BALANCER_DNS:LOAD_BALANCER_PORT --api
 For example:
 ```
 kubeadm init --control-plane-endpoint=k8s.example.internal:6443 --apiserver-advertise-address=192.168.200.21 --pod-network-cidr=10.128.0.0/14 --cri-socket=unix:///run/containerd/containerd.sock
+```
 
-wget https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
-kubectl apply -f calico.yaml
-
+### install calico:
+```
+helm repo add projectcalico https://docs.tigera.io/calico/charts
+helm install calico projectcalico/tigera-operator --version v3.29.1 --namespace tigera-operator
 ```
 
 ### in second and third master node:
@@ -62,7 +64,6 @@ kubectl apply -f calico.yaml
 kubeadm join endpoint=k8s.example.internal:6443 --token TOKEN_DISPLAYED_IN_INIT \
         --discovery-token-ca-cert-hash CA_CERT_HASH_DISPLAYED_IN_INIT \
         --control-plane
-
 ```
 
 All nodes should be in ready status:
