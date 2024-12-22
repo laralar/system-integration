@@ -14,9 +14,12 @@ echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.
 apt-get update
 apt-get install -y kubelet kubeadm kubectl containerd
 apt-mark hold kubelet kubeadm kubectl
+apt upgrade -y
+apt autoremove -y
 systemctl enable --now kubelet
 
-mkdir /etc/containerd
+mkdir -p /etc/containerd
+mkdir -p /etc/kubernetes/manifests
 containerd config default | sudo tee /etc/containerd/config.toml >/dev/null 2>&1
 sudo sed -i 's/SystemdCgroup \= false/SystemdCgroup \= true/g' /etc/containerd/config.toml
 sed -e "s/sandbox_image.*/sandbox_image = \"registry.k8s.io\/pause:3.9\"/" -i  /etc/containerd/config.toml
@@ -37,10 +40,6 @@ apparmor_parser -R /etc/apparmor.d/crun
 ln -s /etc/apparmor.d/runc /etc/apparmor.d/disable/
 ln -s /etc/apparmor.d/crun /etc/apparmor.d/disable/
 
-apt update -y
-apt upgrade -y
-apt autoremove -y
-
 systemctl restart containerd.service
 ```
 
@@ -55,8 +54,13 @@ kubeadm init --control-plane-endpoint=k8s.example.internal:6443 --apiserver-adve
 
 ### install calico:
 ```
-helm repo add projectcalico https://docs.tigera.io/calico/charts
-helm install calico projectcalico/tigera-operator --version v3.29.1 --namespace tigera-operator
+wget https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
+kubectl apply -f calico.yaml 
+
+#not working:
+#helm repo add projectcalico https://docs.tigera.io/calico/charts
+#helm install calico projectcalico/tigera-operator --version v3.29.1 --namespace tigera-operator --create-namespace
+
 ```
 
 ### in second and third master node:
