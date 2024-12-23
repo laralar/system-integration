@@ -7,7 +7,10 @@ https://hbayraktar.medium.com/how-to-install-kubernetes-cluster-on-ubuntu-22-04-
 
 https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
 
+# Basic setup
 #### In all the nodes:
+Prepare the node for a deployment (control-plane or worker node)
+
 ```
 apt-get install -y apt-transport-https ca-certificates curl gpg
 rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -45,7 +48,7 @@ ln -s /etc/apparmor.d/crun /etc/apparmor.d/disable/
 systemctl restart containerd.service
 ```
 
-### in first master node:
+## in the first master node:
 
 Let's specify the pod network and service network, this will be used for assigning IP to pods, /16 is enough for a small deployment.   
 
@@ -60,6 +63,7 @@ kubeadm init --control-plane-endpoint=k8s.cloud.example.org:6443 --apiserver-adv
 ```
 
 ### install calico:
+calico is used for networking, other optiosn available.  by default each node has an IP that is accessible from the host. (pod network)  if we want pods in one host to communicate with pods in other hosts, they have to be able to reach the other pod; calico enables that inter pod, inter host communication, routing traffic through the hosts physical networks.
 
 By default calico autodiscovers the network cidr where that it is going to use in the nodes; this is fine if the node has only one network interface; if there are multiple interfaces we have to specify the autodetection cidr to avoid the selection of a network that would make pod to pod communicationunreachable
 
@@ -100,7 +104,7 @@ kubectl apply -f calico.yaml
 
 ```
 
-### in second and third master node:
+## in second and third master node:
 ```
 kubeadm join endpoint=k8s.example.internal:6443 --token TOKEN_DISPLAYED_IN_INIT \
         --discovery-token-ca-cert-hash CA_CERT_HASH_DISPLAYED_IN_INIT \
@@ -117,13 +121,13 @@ k03    Ready    control-plane   8m14s   v1.31.4   192.168.200.23   <none>       
 root@k01:~# 
 ```
 
-### join worker nodes:
+## join worker nodes:
 ```
 kubeadm join k8s.example.internal:6443 --token 7fx3db.gxvq3ziy21xhqh46 \
         --discovery-token-ca-cert-hash sha256:8430b2820ee4bc0d5f89c62039c90d942eaa8323b5d112a97213ea7388147831
 ```
 
-### remove a worker node:
+## remove a node:
 ```
 kubectl cordon NODE # do not accept any moer pods
 kubectl drain NODE --ignore-daemonsets --delete-emptydir-data
@@ -192,7 +196,7 @@ helm status haproxy
 helm uninstall haproxy
 ```
 
-## dashboard
+## dashboard (optional)
 ```
 helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
 helm install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard --create-namespace --namespace kubernetes-dashboard
@@ -220,6 +224,137 @@ kubectl port-forward -n kubernetes-dashboard svc/kubernetes-dashboard-kong-proxy
 
 
 ```
+
+## external ceph storage
+Create sample deployment files
+```
+helm repo add ceph-csi https://ceph.github.io/csi-charts --force-update
+helm show values ceph-csi/ceph-csi-rbd |tee defaultValues-ceph-csi-rbd.yaml
+helm show values ceph-csi/ceph-csi-cephfs |tee defaultValues-ceph-csi-cephfs.yaml
+```
+
+```
+cat <<EOF > values-ceph-csi-rbd.yaml
+cephConfConfigMapName: ceph-config-rbd
+configMapName: ceph-csi-config-rbd
+csiConfig:
+   - clusterID: "<cluster-id>"
+     monitors:
+       - "<MONValue1:PORT>"
+       - "<MONValue2:PORT>"
+storageClass:
+  clusterID: "<cluster-id>"
+  create: true
+  # Needed if using a specific data pool (e.g. erasure codeing pool)
+  dataPool: ''
+  pool: kubernetes
+EOF
+cat <<EOF > values-ceph-csi-cephfs.yaml
+cephConfConfigMapName: ceph-config-cephfs
+configMapName: ceph-csi-config-cephfs
+csiConfig:
+   - clusterID: "<cluster-id>"
+     monitors:
+       - "<MONValue1:PORT>"
+       - "<MONValue2:PORT>"
+    cephFS:
+      # (optional) CephFS sub volume group
+      subvolumeGroup: "csi"
+storageClass:
+  create: true
+  name: csi-cephfs-sc
+  clusterID: <CLUSTER-ID>
+  # (required) CephFS filesystem name into which the volume shall be created
+  fsName: cephfs
+  reclaimPolicy: Delete
+  allowVolumeExpansion: true
+  # (optional) CephFS sub volume prefix
+  volumeNamePrefix: "poc-k8s-"
+  provisionerSecret: csi-cephfs-secret
+  controllerExpandSecret: csi-cephfs-secret
+  nodeStageSecret: csi-cephfs-secret
+  pool: ''
+EOF
+
+cat <<EOF > csi-rbd-secret.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: csi-rbd-secret
+  namespace: ceph-csi-rbd
+data:
+  userID: BASE64_USERID
+  userKey: BASE64_KEY
+type: Opaque
+EOF
+cat <<EOF > csi-cephfs-secret.yaml
+kind: Secret
+apiVersion: v1
+metadata:
+  name: csi-cephfs-secret
+  namespace: ceph-csi-cephfs
+data:
+  adminID: BASE64_ADMIN_USERID
+  adminKey: BASE64_ADMIN_KEY
+type: Opaque
+EOF
+kubectl apply -f csi-rbd-secret.yaml
+kubectl apply -f csi-cephfs-secret.yaml
+
+helm upgrade --install ceph-csi-rbd ceph-csi/ceph-csi-rbd --values values-ceph-csi-rbd.yaml -n ceph-csi-rbd --create-namespace
+helm upgrade --install ceph-csi-cephfs ceph-csi/ceph-csi-cephfs --values values-ceph-csi-cephfs.yaml  -n ceph-csi-cephfs --create-namespace
+kubectl patch storageclass csi-rbd-sc -p '{"metadata": {"annotations": {"storageclass.kubernetes.io/is-default-class": "true"}}}'
+
+cat <<EOF > raw-block-pvc-.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: image-registry-storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Block
+  resources:
+    requests:
+      storage: 1Ti
+  storageClassName: csi-rbd-sc
+EOF
+kubectl apply -f raw-block-pvc-.yaml
+kubectl get pvc
+# it has to be in bound state
+
+```
+
+## kubevirt (optional)
+```
+export VERSION=$(curl https://storage.googleapis.com/kubevirt-prow/release/kubevirt/kubevirt/stable.txt)
+wget https://github.com/kubevirt/kubevirt/releases/download/${VERSION}/kubevirt-operator.yaml
+wget https://github.com/kubevirt/kubevirt/releases/download/${VERSION}/kubevirt-cr.yaml
+wget https://github.com/kubevirt/kubevirt/releases/download/${VERSION}/virtctl-${VERSION}-linux-amd64
+mv virtctl-${VERSION}-linux-amd64 /usr/local/bin/virtctl
+chmod 755 /usr/local/bin/virtctl
+kubectl apply -f kubevirt-operator.yaml
+kubectl apply -f kubevirt-cr.yaml
+kubectl get pods -n kubevirt
+
+wget https://raw.githubusercontent.com/kubevirt/kubevirt.github.io/master/labs/manifests/vm.yaml
+kubectl apply -f vm.yaml
+kubectl get vms
+virtctl start testvm
+kubectl get vms
+kubectl get vmi
+virtctl console testvm
+kubectl get pods
+kubectl port-forward pod/virt-launcher-testvm-fkccd 222:22 &
+ssh cirros@localhost -p 222
+virtctl stop testvm
+kubectl get vms
+kubectl delete vm testvm
+kubectl get vms
+```
+
+
+
 
 
 
