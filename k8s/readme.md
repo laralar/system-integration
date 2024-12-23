@@ -54,12 +54,41 @@ kubeadm init --control-plane-endpoint=k8s.example.internal:6443 --apiserver-adve
 
 ### install calico:
 ```
+cat <<EOF > calico.yml
+# This section includes base Calico installation configuration.
+# For more information, see: https://docs.tigera.io/calico/latest/reference/installation/api#operator.tigera.io/v1.Installation
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  # Configures Calico networking.
+  calicoNetwork:
+    ipPools:
+    - name: default-ipv4-ippool
+      blockSize: 26
+      cidr:  10.128.0.0/16
+      encapsulation: VXLANCrossSubnet
+      natOutgoing: Enabled
+      nodeSelector: all()
+    nodeAddressAutodetectionV4:
+      cidrs:
+        - '192.168.200.0/24'
+
+---
+
+# This section configures the Calico API server.
+# For more information, see: https://docs.tigera.io/calico/latest/reference/installation/api#operator.tigera.io/v1.APIServer
+apiVersion: operator.tigera.io/v1
+kind: APIServer
+metadata:
+  name: default
+spec: {}
 wget https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
 kubectl apply -f calico.yaml 
-
-#not working:
-#helm repo add projectcalico https://docs.tigera.io/calico/charts
-#helm install calico projectcalico/tigera-operator --version v3.29.1 --namespace tigera-operator --create-namespace
+EOF
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/tigera-operator.yaml
+kubectl apply -f calico.yaml
 
 ```
 
@@ -91,7 +120,10 @@ kubeadm join k8s.example.internal:6443 --token 7fx3db.gxvq3ziy21xhqh46 \
 kubectl cordon NODE # do not accept any moer pods
 kubectl drain NODE --ignore-daemonsets --delete-emptydir-data
 kubectl delete node NODE
+```
 
+### cleanup the node
+```
 #on the node:
 kubeadm reset -f
 rm -rf ~/.kube /etc/cni /etc/kubernetes /var/lib/etcd /var/lib/kubelet
