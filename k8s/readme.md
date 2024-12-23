@@ -46,12 +46,17 @@ systemctl restart containerd.service
 ```
 
 ### in first master node:
+
+Let's specify the pod network and service network, this will be used for assigning IP to pods, /16 is enough for a small deployment.   
+
+If the node has multiple interfaces, it is better to also specify the api-server address; so that it is published in the correct interface
+
 ```
-kubeadm init --control-plane-endpoint=LOAD_BALANCER_DNS:LOAD_BALANCER_PORT --apiserver-advertise-address=LOCALNODE_IP_TO_ADVERTISE  --pod-network-cidr=NON_CONFLICTING_CIDR --cri-socket=unix:///run/containerd/containerd.sock
+kubeadm init --control-plane-endpoint=LOAD_BALANCER_FQDN:LOAD_BALANCER_PORT --apiserver-advertise-address=NODE_IP --service-cidr=10.96.0.0/16 --pod-network-cidr=10.128.0.0/16 --cri-socket=unix:///run/containerd/containerd.sock --upload-certs
 ```
 For example:
 ```
-kubeadm init --control-plane-endpoint=k8s.example.internal:6443 --apiserver-advertise-address=192.168.200.21 --pod-network-cidr=10.128.0.0/14 --cri-socket=unix:///run/containerd/containerd.sock
+kubeadm init --control-plane-endpoint=k8s.cloud.example.org:6443 --apiserver-advertise-address=192.168.200.21 --service-cidr=10.96.0.0/16 --pod-network-cidr=10.128.0.0/16 --cri-socket=unix:///run/containerd/containerd.sock --upload-certs
 ```
 
 ### install calico:
@@ -89,8 +94,6 @@ kind: APIServer
 metadata:
   name: default
 spec: {}
-wget https://raw.githubusercontent.com/projectcalico/calico/master/manifests/calico.yaml
-kubectl apply -f calico.yaml 
 EOF
 kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/tigera-operator.yaml
 kubectl apply -f calico.yaml
@@ -127,7 +130,7 @@ kubectl drain NODE --ignore-daemonsets --delete-emptydir-data
 kubectl delete node NODE
 ```
 
-### cleanup the node
+### cleanup the node for another deployment
 ```
 #on the node:
 kubeadm reset -f
@@ -164,6 +167,12 @@ kubectl port-forward service/test-nginx --address 127.0.0.1 8082:80 &
 curl localhost:8082
 kubectl delete services test-nginx
 kubectl delete deployment test-nginx 
+
+#nslookup can test if pods in other nodes can reach the coredns pod; I had issues where I could not because calico was using the wrong network
+kubectl run test-pod --image=busybox --restart=Never -- sleep 3600
+kubectl exec -it test-pod -- nslookup kubernetes.default.svc.cluster.local
+
+
 ```
 
 
