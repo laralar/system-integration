@@ -5,6 +5,8 @@ https://www.server-world.info/en/note?os=Ubuntu_24.04&p=kubernetes&f=2
 
 https://hbayraktar.medium.com/how-to-install-kubernetes-cluster-on-ubuntu-22-04-step-by-step-guide-7dbf7e8f5f99
 
+https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
+
 #### In all the nodes:
 ```
 apt-get install -y apt-transport-https ca-certificates curl gpg
