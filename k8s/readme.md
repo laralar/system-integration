@@ -196,6 +196,46 @@ helm status haproxy
 helm uninstall haproxy
 ```
 
+## load balancer
+```
+helm repo add metallb https://metallb.github.io/metallb --force-update
+
+helm install metallb metallb/metallb -n metallb-system --create-namespace
+cat <<EOF > metallb-config.yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: cheap
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.200.60-192.168.200.99
+EOF
+kubectl apply -f metallb-config.yaml
+
+
+```
+
+## ingress
+```
+
+
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update
+helm show values ingress-nginx/ingress-nginx | tee defaultValues-ingress-nginx.yzml
+
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace \
+  --set controller.watchIngressWithoutClass=true \
+  --set controller.allowSnippetAnnotations=true
+
+or
+
+helm install ingress-nginx  ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace -f values-ingress-nginx.yaml
+
+
+kubectl scale deployment ingress-nginx-controller -n ingress-nginx --replicas=3
+```
+
 ## dashboard (optional)
 ```
 helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
