@@ -55,6 +55,9 @@ kubeadm init --control-plane-endpoint=k8s.example.internal:6443 --apiserver-adve
 ```
 
 ### install calico:
+
+By default calico autodiscovers the network cidr where that it is going to use in the nodes; this is fine if the node has only one network interface; if there are multiple interfaces we have to specify the autodetection cidr to avoid the selection of a network that would make pod to pod communicationunreachable
+
 ```
 cat <<EOF > calico.yml
 # This section includes base Calico installation configuration.
